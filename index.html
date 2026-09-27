@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en" data-theme="night">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gameday Bingo</title>
+<meta name="description" content="Live watch-party bingo. Everyone gets their own card from the same pool of squares. Tap squares as it happens.">
+<meta name="theme-color" content="#0B1B33">
+<meta name="color-scheme" content="dark light">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bingo">
+<meta property="og:title" content="Gameday Bingo">
+<meta property="og:description" content="Join my watch-party bingo game.">
+<meta property="og:image" content="icons/icon-512.png">
+<script>
+  // Apply the saved theme before first paint to avoid a flash.
+  try {
+    var s = JSON.parse(localStorage.getItem('gdb:settings') || '{}');
+    var d = document.documentElement;
+    if (s.theme) d.dataset.theme = s.theme;
+    if (s.theme === 'custom' && s.custom) {
+      d.style.setProperty('--primary', s.custom.primary);
+      d.style.setProperty('--gold', s.custom.accent);
+    }
+  } catch (e) {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Barlow+Condensed:wght@600;800&family=Inter:wght@400;600;800&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="css/app.css">
+<link rel="modulepreload" href="js/main.js">
+<link rel="modulepreload" href="js/store.js">
+<link rel="modulepreload" href="js/ui.js">
+<link rel="modulepreload" href="js/settings.js">
+<link rel="modulepreload" href="js/theme.js">
+<link rel="modulepreload" href="js/screens/home.js">
+<script type="module" src="js/main.js"></script>
+</head>
+<body>
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <defs>
+    <!-- Rough, inky edge for dauber blots. -->
+    <filter id="gdb-rough" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="3" seed="4" result="warp"/>
+      <feDisplacementMap in="SourceGraphic" in2="warp" scale="9" xChannelSelector="R" yChannelSelector="G" result="rough"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="11" result="grain"/>
+      <feColorMatrix in="grain" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -3 2.35" result="speckle"/>
+      <feComposite in="rough" in2="speckle" operator="in"/>
+    </filter>
+    <radialGradient id="gdb-ink" cx="50%" cy="46%" r="55%">
+      <stop offset="0%" style="stop-color:var(--blot);stop-opacity:.5"/>
+      <stop offset="70%" style="stop-color:var(--blot);stop-opacity:.62"/>
+      <stop offset="100%" style="stop-color:var(--blot);stop-opacity:.85"/>
+    </radialGradient>
+  </defs>
+</svg>
+
+<div id="app" aria-live="off">
+  <main class="screen screen-home" data-static>
+    <header class="home-hero">
+      <p class="kicker">Gameday</p>
+      <h1 class="wordmark distress">BINGO</h1>
+      <p class="tagline">Watch-party bingo. Everybody gets their own card.</p>
+    </header>
+  </main>
+</div>
+<div id="layer" aria-live="polite"></div>
+<noscript><p style="padding:24px;color:#fff">Gameday Bingo needs JavaScript turned on.</p></noscript>
+</body>
+</html>
