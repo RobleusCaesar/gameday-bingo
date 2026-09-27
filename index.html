@@ -22,8 +22,8 @@
   try {
     var s = JSON.parse(localStorage.getItem('gdb:settings') || '{}');
     var d = document.documentElement;
-    if (s.theme) d.dataset.theme = s.theme;
-    if (s.theme === 'custom' && s.custom) {
+    if (['night', 'day', 'neutral', 'custom'].indexOf(s.theme) >= 0) d.dataset.theme = s.theme;
+    if (s.theme === 'custom' && s.custom && /^#[0-9a-f]{6}$/i.test(s.custom.primary) && /^#[0-9a-f]{6}$/i.test(s.custom.accent)) {
       d.style.setProperty('--primary', s.custom.primary);
       d.style.setProperty('--gold', s.custom.accent);
     }
@@ -70,7 +70,7 @@
     </header>
   </main>
 </div>
-<div id="layer" aria-live="polite"></div>
+<div id="layer"></div>
 <noscript><p style="padding:24px;color:#fff">Gameday Bingo needs JavaScript turned on.</p></noscript>
 </body>
 </html>

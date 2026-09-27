@@ -2,7 +2,7 @@
 // snapshot and game options, so a joiner can build a board with the host offline.
 import { loadLZ } from './libs.js';
 import { isCode } from './rng.js';
-import { MIX } from './board.js';
+import { MIX, tiersOf } from './board.js';
 
 const MIX_CODE = { chill: 'c', balanced: 'b', chaos: 'x' };
 const MIX_FROM = { c: 'chill', b: 'balanced', x: 'chaos' };
@@ -52,7 +52,9 @@ export function sanitizeConfig(cfg) {
   const squares = cfg.squares.slice(0, MAX_SQUARES)
     .map((s) => ({ t: str(s && s.t, 80).trim(), r: ['C', 'U', 'R'].includes(s && s.r) ? s.r : 'C' }))
     .filter((s) => s.t);
-  if (squares.length < 24) return null;
+  // Count the way the board generator does (duplicates don't count).
+  const tiers = tiersOf(squares);
+  if (tiers.C.length + tiers.U.length + tiers.R.length < 24) return null;
   const out = {
     v: 1,
     code: cfg.code,
@@ -69,7 +71,8 @@ export function sanitizeConfig(cfg) {
     createdAt: Number(cfg.createdAt) || Date.now(),
   };
   if (cfg.endedAt) {
-    out.endedAt = Number(cfg.endedAt) || Date.now();
+    const t = Number(cfg.endedAt);
+    out.endedAt = Math.min(Number.isFinite(t) ? t : Date.now(), Date.now() + 60000);
     out.final = sanitizeStandings(cfg.final);
   }
   return out;
@@ -84,6 +87,7 @@ export function sanitizeStandings(list) {
     points: Math.max(0, Math.min(99999, Number(p?.points) || 0)),
     bingos: Math.max(0, Math.min(99, Number(p?.bingos) || 0)),
     marks: Number(p?.marks) >>> 0,
+    lastEventAt: Math.max(0, Math.min(Date.now() + 60000, Number(p?.lastEventAt) || 0)),
   }));
 }
 

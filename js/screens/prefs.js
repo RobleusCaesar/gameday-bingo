@@ -4,7 +4,7 @@ import { profile, settings, updateSettings, resetSettingsCache } from '../settin
 import { THEMES } from '../theme.js';
 import { buildProfileForm } from './onboard.js';
 import { wakeLockSupported } from '../wakelock.js';
-import { closeCurrent, currentSession } from '../game.js';
+import { closeCurrent, currentSession, validState } from '../game.js';
 import * as store from '../store.js';
 import * as sfx from '../audio.js';
 import * as haptics from '../haptics.js';
@@ -15,6 +15,20 @@ function switchRow(label, sub, checked, onChange) {
     onclick: () => { checked = !checked; sw.setAttribute('aria-checked', String(checked)); onChange(checked); },
   });
   return h('div', { class: 'set-row' }, h('div', { class: 'l' }, h('b', null, label), sub ? h('small', null, sub) : null), sw);
+}
+
+/** Which backup entries are safe to restore. */
+function validEntry(key, v) {
+  const obj = v && typeof v === 'object' && !Array.isArray(v);
+  if (key === 'profile') return obj && typeof v.id === 'string' && typeof v.name === 'string';
+  if (key === 'settings' || key === 'lastCreate') return obj; // settings are re-cleaned on read
+  if (key === 'packs') {
+    return Array.isArray(v) && v.every((p) => p && typeof p.id === 'string' && typeof p.name === 'string'
+      && Array.isArray(p.squares) && p.squares.every((q) => q && typeof q.t === 'string' && ['C', 'U', 'R'].includes(q.r)));
+  }
+  if (/^game:[A-Z2-9]{5}$/.test(key)) return validState(v);
+  if (key === 'a2hsDismissed') return typeof v === 'boolean';
+  return false;
 }
 
 function download(name, text) {
@@ -87,7 +101,7 @@ export function render(app) {
       const data = JSON.parse(await f.text());
       if (!(await confirmSheet({ title: 'Import backup?', body: 'Games, packs and settings in the file will replace the ones with the same name on this device.', ok: 'Import' }))) return;
       closeCurrent();
-      const n = store.importAll(data);
+      const n = store.importAll(data, validEntry);
       resetSettingsCache();
       updateSettings({});
       say(`Imported ${n} items`, '📦');

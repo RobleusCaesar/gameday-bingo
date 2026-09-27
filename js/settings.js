@@ -21,13 +21,31 @@ const DEFAULTS = {
 let cache = null;
 const listeners = new Set();
 
+const HEX = /^#[0-9a-f]{6}$/i;
+
+/** Merge saved settings over defaults, dropping anything malformed (e.g. from an old backup). */
+function clean(saved) {
+  const s = { ...DEFAULTS };
+  if (!saved || typeof saved !== 'object') return s;
+  if (typeof saved.sound === 'boolean') s.sound = saved.sound;
+  if (Number.isFinite(saved.volume)) s.volume = Math.max(0, Math.min(1, saved.volume));
+  if (typeof saved.haptics === 'boolean') s.haptics = saved.haptics;
+  if (['auto', 'reduced', 'full'].includes(saved.motion)) s.motion = saved.motion;
+  if (['night', 'day', 'neutral', 'custom'].includes(saved.theme)) s.theme = saved.theme;
+  if (saved.custom && HEX.test(saved.custom.primary) && HEX.test(saved.custom.accent)) {
+    s.custom = { primary: saved.custom.primary, accent: saved.custom.accent };
+  }
+  if (typeof saved.wakeLock === 'boolean') s.wakeLock = saved.wakeLock;
+  return s;
+}
+
 export function settings() {
-  if (!cache) cache = { ...DEFAULTS, ...(store.get('settings') || {}) };
+  if (!cache) cache = clean(store.get('settings'));
   return cache;
 }
 
 export function updateSettings(patch) {
-  cache = { ...settings(), ...patch };
+  cache = clean({ ...settings(), ...patch });
   store.set('settings', cache);
   listeners.forEach((fn) => fn(cache));
   return cache;
@@ -47,10 +65,12 @@ export function reducedMotion() {
 
 export function profile() {
   let p = store.get('profile');
-  if (!p || !p.id) {
-    p = { id: uuid(), name: '', emoji: '', ...(p || {}) };
+  if (!p || typeof p !== 'object' || typeof p.id !== 'string' || !p.id) {
+    p = { name: '', emoji: '', ...(p && typeof p === 'object' ? p : {}), id: uuid() };
     store.set('profile', p);
   }
+  if (typeof p.name !== 'string') p.name = '';
+  if (typeof p.emoji !== 'string') p.emoji = '';
   return p;
 }
 

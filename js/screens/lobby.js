@@ -5,6 +5,7 @@ import { invitePanel } from '../invite.js';
 import { fill } from '../share.js';
 import { cleanText } from '../packs.js';
 import { syncConfigured } from '../sync.js';
+import { normText } from '../board.js';
 
 function swapSheet(session) {
   return sheet((close) => {
@@ -20,6 +21,8 @@ function swapSheet(session) {
           onclick: async () => {
             const next = await editOne(s);
             if (!next) return;
+            const dupe = session.config.squares.some((x, k) => k !== i && normText(x.t) === normText(next.t));
+            if (dupe) { say('That square is already in this game.', '⚠️'); return; }
             if (session.swapSquare(i, next)) say('Square swapped. Boards updated.', '🔁');
             else say('Too late: someone already marked a square.', '🔒');
             draw();

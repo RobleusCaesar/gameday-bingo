@@ -1,6 +1,7 @@
 // Service worker: precaches the app shell so solo play works offline.
-// The deploy workflow stamps VERSION with the commit SHA; a new SW installs a fresh
-// shell cache atomically and the page offers a refresh.
+// The deploy workflow stamps VERSION with the commit SHA. A new SW installs a fresh
+// shell cache and then waits; the page offers "Refresh", which activates it, so an
+// open page never mixes old and new modules.
 const VERSION = 'gdb-3-__BUILD__';
 const SHELL_CACHE = 'gdb-shell-' + VERSION;
 const RUNTIME_CACHE = 'gdb-runtime-1';
@@ -57,9 +58,12 @@ const RUNTIME_HOSTS = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstati
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(SHELL_CACHE)
-      .then((cache) => cache.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' }))))
-      .then(() => self.skipWaiting()),
+      .then((cache) => cache.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))),
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data === 'skip-waiting') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {

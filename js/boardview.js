@@ -25,7 +25,16 @@ function ctx(size) {
 /** Break units: words split on spaces and after slashes; pieces split after hyphens and at soft hyphens. */
 function units(text) {
   return text.toUpperCase().replace(/\//g, '/ ').split(/\s+/).filter(Boolean)
-    .map((word) => word.split(/(?<=-)|\u00AD/).map((part, k, all) => (k < all.length - 1 && !part.endsWith('-') ? part + '-' : part)));
+    .map((word) => {
+      // Split after real hyphens and at soft hyphens (which render as "-" when used).
+      const pieces = [];
+      let cur = '';
+      for (const ch of word) {
+        if (ch === '\u00AD') { pieces.push(cur + '-'); cur = ''; } else { cur += ch; if (ch === '-') { pieces.push(cur); cur = ''; } }
+      }
+      if (cur || !pieces.length) pieces.push(cur);
+      return pieces;
+    });
 }
 
 /** Largest font size (px) at which `text` wraps into a w×h box, never below 11px. */
@@ -173,7 +182,7 @@ export class BoardView {
 
   _wire(cell, i) {
     let timer = null;
-    let fired = false;
+    let firedAt = 0; // set when a long-press opened the sheet; the click that follows is swallowed
     let start = null;
     const cancel = () => {
       clearTimeout(timer);
@@ -182,11 +191,11 @@ export class BoardView {
     };
     cell.addEventListener('pointerdown', (e) => {
       if (e.button > 0) return;
-      fired = false;
+      firedAt = 0;
       start = { x: e.clientX, y: e.clientY };
       if (!this.s.ended) cell.classList.add('pressed');
       timer = setTimeout(() => {
-        fired = true;
+        firedAt = Date.now();
         cell.classList.remove('pressed');
         this.handlers.onLongPress(i);
       }, LONG_PRESS_MS);
@@ -199,13 +208,14 @@ export class BoardView {
     cell.addEventListener('pointerleave', cancel);
     cell.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      if (!fired) { fired = true; cancel(); this.handlers.onLongPress(i); }
+      if (!firedAt) { firedAt = Date.now(); cancel(); this.handlers.onLongPress(i); }
     });
     cell.addEventListener('click', (e) => {
-      if (fired) { fired = false; e.preventDefault(); return; }
+      if (firedAt) { firedAt = 0; e.preventDefault(); return; }
       this.handlers.onTap(i);
     });
     cell.addEventListener('keydown', (e) => {
+      firedAt = 0; // keyboard activation is never the tail of a long-press
       if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); this.handlers.onLongPress(i); }
     });
   }

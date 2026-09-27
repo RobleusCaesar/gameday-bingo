@@ -36,6 +36,7 @@ export function render(app, code) {
   const s = openSession(code);
   if (!s) { notFound(app, code); return; }
   const me = s.me;
+  let disposed = false;
   let tab = 'board';
   let unread = 0;
   const quickToasts = new Map();
@@ -44,11 +45,10 @@ export function render(app, code) {
   const dot = h('span', { class: 'dot' });
   const countEl = h('span');
   const pill = h('button', { class: 'players-pill', onclick: () => setTab('scores') }, dot, h('span', { 'aria-hidden': 'true' }, '👥'), countEl);
-  const muteBtn = h('button', { class: 'icon-btn', onclick: () => { updateSettings({ sound: !settings().sound }); paintMute(); if (settings().sound) sfx.blip(); } });
+  const muteBtn = h('button', { class: 'icon-btn', 'aria-label': 'Mute sounds', onclick: () => { updateSettings({ sound: !settings().sound }); paintMute(); if (settings().sound) sfx.blip(); } });
   const paintMute = () => {
     const on = settings().sound;
     muteBtn.innerHTML = on ? ICON.sound : ICON.mute;
-    muteBtn.setAttribute('aria-label', on ? 'Mute sounds' : 'Turn sounds on');
     muteBtn.setAttribute('aria-pressed', String(!on));
   };
   paintMute();
@@ -121,10 +121,11 @@ export function render(app, code) {
       case 'end': emoji = '🏁'; body = ['Game over', it.name ? ` (ended by ${it.name})` : '', '. Final scores are in.']; cls += ' bingo'; break;
       default: body = ['…'];
     }
+    const when = new Date(it.at);
     return h('li', { class: cls + (fresh ? ' new' : '') },
       h('span', { class: 'fe', 'aria-hidden': 'true' }, emoji),
       h('span', { class: 'ft' }, ...body),
-      h('time', { datetime: new Date(it.at).toISOString(), dataset: { at: it.at } }, timeAgo(it.at)));
+      h('time', { datetime: Number.isNaN(when.getTime()) ? null : when.toISOString(), dataset: { at: it.at } }, timeAgo(it.at)));
   };
   const paintFeed = () => {
     feedList.replaceChildren(...s.state.feed.map((it) => feedItem(it, false)));
@@ -224,7 +225,7 @@ export function render(app, code) {
   }
 
   function afterFirstBingo() {
-    if (!app.isConnected) return;
+    if (disposed) return;
     const ev = s.evaluate();
     const { rank, of } = s.myRank();
     sheet((close) => h('div', { class: 'center' },
@@ -309,7 +310,13 @@ export function render(app, code) {
     change: () => { paintStrip(); scores.render(); sideScores.render(); },
     players: () => { paintPill(); paintStrip(); scores.render(); sideScores.render(); },
     status: () => { paintPill(); scores.render(); sideScores.render(); },
-    board: () => { board.build(); paintStrip(); },
+    board: () => {
+      board.build();
+      paintStrip();
+      // Board changed under any pending "Got it too" toasts.
+      for (const t of quickToasts.values()) t.close();
+      quickToasts.clear();
+    },
     feed: (e) => {
       const it = e.detail;
       feedList.prepend(feedItem(it, tab === 'feed'));
@@ -318,7 +325,7 @@ export function render(app, code) {
       if (tab !== 'feed' && it.pid !== me.id && it.type !== 'unmark') { unread++; paintBadge(); }
     },
     quickmark: (e) => {
-      const { idx, from, text } = e.detail;
+      const { tmpl, from, text } = e.detail;
       const key = 'qm:' + text.toLowerCase();
       sfx.blip();
       const t = toast({
@@ -330,7 +337,8 @@ export function render(app, code) {
         duration: 8000,
         onAction: () => {
           quickToasts.delete(key);
-          if (s.marks[idx] || s.ended) return;
+          const idx = s.indexOfSquare(tmpl); // look it up now: the board may have changed
+          if (idx < 0 || s.ended) return;
           if (tab !== 'board') setTab('board');
           const res = s.toggle(idx);
           if (res) requestAnimationFrame(() => celebrateMark(idx, res));
@@ -357,14 +365,13 @@ export function render(app, code) {
       holdScreen(false);
       const by = e.detail?.byName;
       if (by && by !== me.name) banner(`${by} ended the game`, '🏁', 1800);
-      setTimeout(() => { if (app.isConnected) go('/final/' + code); }, by && by !== me.name ? 1600 : 0);
+      setTimeout(() => { if (!disposed) go('/final/' + code); }, by && by !== me.name ? 1600 : 0);
     },
   };
-  for (const [k, fn] of Object.entries(on)) s.addEventListener(k, fn);
-
   paintPill();
   paintStrip();
   paintFeed();
+  for (const [k, fn] of Object.entries(on)) s.addEventListener(k, fn);
   holdScreen(settings().wakeLock && !s.ended);
 
   // In landscape the leaderboard lives beside the board, so leave the Scores tab.
@@ -373,6 +380,7 @@ export function render(app, code) {
   sideBySide.addEventListener?.('change', onLayout);
 
   return () => {
+    disposed = true;
     for (const [k, fn] of Object.entries(on)) s.removeEventListener(k, fn);
     clearInterval(tickTimes);
     sideBySide.removeEventListener?.('change', onLayout);

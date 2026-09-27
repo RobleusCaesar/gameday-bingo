@@ -11,6 +11,19 @@ export function syncConfigured() {
 
 let clientPromise = null;
 const removals = new Map(); // code -> promise of a channel being torn down
+
+/** Leave a channel if it's still joined, then make sure the client forgets it. */
+function dropChannel(sb, ch) {
+  const forget = () => {
+    try { ch.teardown?.(); } catch { /* ignore */ }
+    try { sb.realtime?._remove?.(ch); } catch { /* ignore */ }
+  };
+  if (ch.state === 'joined' || ch.state === 'joining') {
+    return sb.removeChannel(ch).catch(() => {}).then(() => { if (sb.getChannels().includes(ch)) forget(); });
+  }
+  forget();
+  return Promise.resolve();
+}
 function client() {
   clientPromise ||= loadSupabase()
     .then(({ createClient }) => createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -78,10 +91,7 @@ export class GameChannel {
     await removals.get(this.code);
     if (this.closed || this.channel) return;
     const topic = `realtime:game:${this.code}`;
-    for (const stale of sb.getChannels().filter((c) => c.topic === topic)) {
-      await sb.removeChannel(stale).catch(() => {});
-      if (sb.getChannels().includes(stale)) { stale.teardown?.(); sb._remove?.(stale); }
-    }
+    for (const stale of sb.getChannels().filter((c) => c.topic === topic)) await dropChannel(sb, stale);
     if (this.closed || this.channel) return;
     this.sb = sb;
     const ch = sb.channel(`game:${this.code}`, {
@@ -93,16 +103,18 @@ export class GameChannel {
       ch.on('broadcast', { event: ev }, (msg) => this.h.broadcast?.(ev, msg.payload || {}));
     }
     ch.subscribe((status) => {
-      if (this.closed) return;
+      if (this.closed || ch !== this.channel) return;
       if (status === 'SUBSCRIBED') {
         this._set('live');
         if (this.summary) ch.track(this.summary).catch(() => {});
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         this._set(navigator.onLine === false ? 'offline' : 'connecting');
         if (status === 'CLOSED') {
-          // Server closed us; rebuild the channel shortly.
+          // Server closed us; forget this channel (guarded above against re-entry) and rebuild shortly.
           this.channel = null;
-          sb.removeChannel(ch).catch(() => {});
+          const done = dropChannel(sb, ch);
+          removals.set(this.code, done);
+          clearTimeout(this._retryTimer);
           this._retryTimer = setTimeout(() => this.open(), 4000);
         }
       }
@@ -148,8 +160,8 @@ export class GameChannel {
     if (this.channel && this.sb) {
       const ch = this.channel;
       const sb = this.sb;
-      const done = sb.removeChannel(ch).catch(() => {}).then(() => {
-        if (sb.getChannels().includes(ch)) { ch.teardown?.(); sb._remove?.(ch); }
+      this.channel = null; // before leaving, so the CLOSED callback ignores it
+      const done = dropChannel(sb, ch).then(() => {
         if (removals.get(this.code) === done) removals.delete(this.code);
       });
       removals.set(this.code, done);

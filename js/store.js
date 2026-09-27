@@ -14,7 +14,8 @@ try {
 export const persistent = !!ls;
 
 export function get(key, fallback = null) {
-  const raw = ls ? ls.getItem(NS + key) : mem.get(NS + key);
+  // Memory first: it holds anything localStorage refused (quota full).
+  const raw = mem.has(NS + key) ? mem.get(NS + key) : ls?.getItem(NS + key);
   if (raw == null) return fallback;
   try { return JSON.parse(raw); } catch { return fallback; }
 }
@@ -22,7 +23,11 @@ export function get(key, fallback = null) {
 export function set(key, value) {
   const raw = JSON.stringify(value);
   if (ls) {
-    try { ls.setItem(NS + key, raw); return true; } catch { /* quota: keep in memory */ }
+    try {
+      ls.setItem(NS + key, raw);
+      mem.delete(NS + key);
+      return true;
+    } catch { /* quota: keep in memory */ }
   }
   mem.set(NS + key, raw);
   return false;
@@ -52,13 +57,17 @@ export function exportAll() {
   return { app: 'gameday-bingo', version: 1, exportedAt: new Date().toISOString(), data };
 }
 
-export function importAll(backup) {
-  if (!backup || backup.app !== 'gameday-bingo' || typeof backup.data !== 'object') {
+/**
+ * Restore a backup. `valid(key, value)` decides which entries are safe to write;
+ * anything it rejects is skipped.
+ */
+export function importAll(backup, valid = () => true) {
+  if (!backup || backup.app !== 'gameday-bingo' || !backup.data || typeof backup.data !== 'object') {
     throw new Error('That file isn’t a Gameday Bingo backup.');
   }
   let n = 0;
   for (const [k, v] of Object.entries(backup.data)) {
-    if (typeof k !== 'string' || k.length > 80) continue;
+    if (typeof k !== 'string' || k.length > 80 || !valid(k, v)) continue;
     set(k, v);
     n++;
   }

@@ -87,12 +87,30 @@ for (const ev of ['pointerdown', 'touchend', 'keydown']) document.addEventListen
 
 window.addEventListener('load', () => {
   import('./libs.js').then((l) => l.prefetchLibs());
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    const hadController = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!hadController) return;
-      toast({ tag: '✨', title: 'Update ready', sub: 'Refresh to get the latest version.', action: 'Refresh', onAction: () => location.reload(), duration: 0 });
-    });
-  }
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') registerServiceWorker();
 });
+
+/** A new version installs in the background and waits; tapping Refresh switches over. */
+async function registerServiceWorker() {
+  let reg;
+  try { reg = await navigator.serviceWorker.register('sw.js'); } catch { return; }
+  if (!reg) return;
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) return; // first install claims the page; nothing to reload
+    refreshing = true;
+    location.reload();
+  });
+  const offer = (worker) => {
+    if (!worker || !navigator.serviceWorker.controller) return;
+    toast({
+      key: 'sw-update', tag: '✨', title: 'Update ready', sub: 'Refresh to get the latest version.', action: 'Refresh', duration: 0,
+      onAction: () => { refreshing = true; worker.postMessage('skip-waiting'); },
+    });
+  };
+  if (reg.waiting) offer(reg.waiting);
+  reg.addEventListener('updatefound', () => {
+    const worker = reg.installing;
+    worker?.addEventListener('statechange', () => { if (worker.state === 'installed') offer(worker); });
+  });
+}

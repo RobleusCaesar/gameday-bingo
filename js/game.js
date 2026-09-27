@@ -9,15 +9,34 @@ import { newCode } from './rng.js';
 import { sanitizeConfig, sanitizeStandings, fill } from './share.js';
 
 const FEED_MAX = 150;
+const MAX_PLAYERS = 60;
+const MAX_GAMES = 40;
 export const ANYONE_CAN_END_AFTER = 4 * 60 * 60 * 1000;
 
 const gameKey = (code) => 'game:' + code;
 
+export function validState(g) {
+  return !!(g && g.code && g.config && Array.isArray(g.config.squares)
+    && Array.isArray(g.board) && g.board.length === 25 && Array.isArray(g.marks));
+}
+
 export function listGames() {
   return store.keys('game:')
     .map((k) => store.get(k))
-    .filter((g) => g && g.code && g.config)
+    .filter(validState)
     .sort((a, b) => (b.lastOpenedAt || 0) - (a.lastOpenedAt || 0));
+}
+
+/** Keep storage bounded: drop the least recently opened games past MAX_GAMES. */
+function pruneGames() {
+  for (const g of listGames().slice(MAX_GAMES)) store.remove(gameKey(g.code));
+}
+
+/** Timestamps from peers: keep them between game creation and a minute from now. */
+function clampTime(t, min = 0) {
+  const now = Date.now();
+  const n = Number(t);
+  return Math.min(Math.max(Number.isFinite(n) ? n : now, min), now + 60000);
 }
 
 export function hasGame(code) {
@@ -50,7 +69,7 @@ export function closeCurrent() {
 export function openSession(code) {
   if (current && current.code === code) return current;
   const state = store.get(gameKey(code));
-  if (!state) return null;
+  if (!validState(state)) return null;
   closeCurrent();
   current = new GameSession(state);
   current.state.lastOpenedAt = Date.now();
@@ -81,6 +100,7 @@ export function createGame({ pack, opp, team, win, mix }) {
     createdAt: Date.now(),
   };
   const state = newState(config, 'host');
+  pruneGames();
   store.set(gameKey(code), state);
   return openSession(code);
 }
@@ -96,7 +116,13 @@ export function joinGame(rawConfig) {
     return s;
   }
   const me = profile();
-  const state = newState(config, config.hostId === me.id ? 'host' : 'player');
+  let state;
+  try {
+    state = newState(config, config.hostId === me.id ? 'host' : 'player');
+  } catch {
+    return null; // the pool can't make a board
+  }
+  pruneGames();
   store.set(gameKey(config.code), state);
   return openSession(config.code);
 }
@@ -163,6 +189,12 @@ export class GameSession extends EventTarget {
   get ended() { return this.state.status === 'ended'; }
   get isHost() { return this.state.role === 'host' || this.config.hostId === this.me.id; }
   get markCount() { return this.marks.filter(Boolean).length - 1; }
+
+  /** Index of an unmarked square with this (template) text on my board, or -1. */
+  indexOfSquare(tmpl) {
+    const key = normText(tmpl);
+    return this.board.findIndex((sq, i) => sq && !this.marks[i] && normText(sq.t) === key);
+  }
 
   text(i) {
     const sq = this.board[i];
@@ -293,27 +325,40 @@ export class GameSession extends EventTarget {
   }
 
   _updatePlayer(p, { online } = {}) {
-    if (!p || typeof p.pid !== 'string' || p.pid === this.me.id) return null;
-    const prev = this.state.players[p.pid];
+    if (!p || typeof p.pid !== 'string' || !p.pid) return null;
+    const pid = p.pid.slice(0, 64);
+    if (pid === this.me.id) return null;
+    const players = this.state.players;
+    const prev = players[pid];
+    if (!prev) {
+      const all = Object.values(players);
+      if (all.length >= MAX_PLAYERS) {
+        // Make room by forgetting the stalest offline player; otherwise ignore the newcomer.
+        const stale = all.filter((x) => !x.online).sort((a, b) => (a.seenAt || 0) - (b.seenAt || 0))[0];
+        if (!stale) return null;
+        delete players[stale.pid];
+      }
+    }
     const next = {
-      pid: p.pid.slice(0, 64),
+      pid,
       name: String(p.name || prev?.name || 'Player').slice(0, 18),
       emoji: String(p.emoji || prev?.emoji || '🏈').slice(0, 8),
       points: Math.max(0, Math.min(99999, Number(p.points) || 0)),
       bingos: Math.max(0, Math.min(99, Number(p.bingos) || 0)),
       marks: Number(p.marks) >>> 0,
-      lastEventAt: Number(p.lastEventAt) || 0,
+      lastEventAt: clampTime(p.lastEventAt),
       host: !!p.host,
       online: online ?? prev?.online ?? true,
       seenAt: Date.now(),
     };
-    this.state.players[p.pid] = next;
+    players[pid] = next;
     return { prev, next };
   }
 
   /* ---------- Feed ---------- */
 
   addFeed(item) {
+    item.at = clampTime(item.at);
     item.id = item.at + ':' + Math.random().toString(36).slice(2, 7);
     this.state.feed.unshift(item);
     if (this.state.feed.length > FEED_MAX) this.state.feed.length = FEED_MAX;
@@ -352,15 +397,19 @@ export class GameSession extends EventTarget {
     for (const [key, metas] of Object.entries(state || {})) {
       if (!Array.isArray(metas) || !metas.length || key === this.me.id) continue;
       const meta = metas.reduce((a, b) => ((b.lastEventAt || 0) >= (a.lastEventAt || 0) ? b : a));
-      const known = this.state.players[key];
+      const known = this.state.players[key.slice(0, 64)];
       // Presence can lag a broadcast we already applied; never roll a score back.
       const res = known && (Number(meta.lastEventAt) || 0) < (known.lastEventAt || 0)
         ? this._updatePlayer({ ...known, name: meta.name, emoji: meta.emoji }, { online: true })
         : this._updatePlayer({ ...meta, pid: key }, { online: true });
       if (!res) continue;
-      seen.add(key);
+      seen.add(res.next.pid);
       if (!res.prev) {
-        this.addFeed({ type: 'join', pid: key, name: res.next.name, emoji: res.next.emoji, at: Date.now() });
+        this.addFeed({ type: 'join', pid: res.next.pid, name: res.next.name, emoji: res.next.emoji, at: Date.now() });
+      }
+      // Late joiners learn that someone already has a bingo, so nobody else claims "first".
+      if (!this.state.firstInGame && res.next.bingos > 0) {
+        this.state.firstInGame = { pid: res.next.pid, name: res.next.name, emoji: res.next.emoji, at: res.next.lastEventAt };
       }
       if ((meta.ended && !this.ended) || (Number(meta.rev) || 0) > (this.config.rev || 0)) needConfig = true;
     }
@@ -381,8 +430,7 @@ export class GameSession extends EventTarget {
         const text = fill(tmpl, this.config);
         this.addFeed({ type: ev, pid: p.pid, name: res.next.name, emoji: res.next.emoji, text, at: Date.now() });
         if (ev === 'mark' && !this.ended) {
-          const idx = this.board.findIndex((sq, i) => sq && !this.marks[i] && normText(sq.t) === normText(tmpl));
-          if (idx >= 0) this.emit('quickmark', { idx, from: res.next, text });
+          if (this.indexOfSquare(tmpl) >= 0) this.emit('quickmark', { tmpl, from: res.next, text });
         } else {
           this.emit('unquick', { pid: p.pid, text });
         }
@@ -391,10 +439,11 @@ export class GameSession extends EventTarget {
         break;
       }
       case 'bingo': {
+        const noFirstYet = !this.state.firstInGame;
         const res = this._updatePlayer(p);
         if (!res) return;
         let first = false;
-        if (p.first && !this.state.firstInGame) {
+        if (p.first && noFirstYet) {
           this.state.firstInGame = { pid: p.pid, name: res.next.name, emoji: res.next.emoji, at: Date.now() };
           first = true;
         }
@@ -415,14 +464,19 @@ export class GameSession extends EventTarget {
         break;
       }
       case 'config': {
-        clearTimeout(this._configReplyTimer); // someone else already answered
         const cfg = sanitizeConfig(p.config);
-        if (cfg && cfg.code === this.code) this.applyConfig(cfg);
+        if (!cfg || cfg.code !== this.code) return;
+        // Someone already answered with something at least as current as ours: stay quiet.
+        if ((cfg.rev || 0) >= (this.config.rev || 0) && (cfg.endedAt || !this.ended)) clearTimeout(this._configReplyTimer);
+        this.applyConfig(cfg);
         break;
       }
       case 'end': {
         if (this.ended) return;
-        this._applyEnd(sanitizeStandings(p.final), Number(p.endedAt) || Date.now(), String(p.byName || '').slice(0, 18));
+        // Only the host can end early; anyone can once the game is 4 hours old.
+        const createdAt = this.config.createdAt || 0;
+        if (p.pid !== this.config.hostId && Date.now() - createdAt < ANYONE_CAN_END_AFTER) return;
+        this._applyEnd(sanitizeStandings(p.final), clampTime(p.endedAt, createdAt), String(p.byName || '').slice(0, 18));
         break;
       }
       default:
@@ -442,17 +496,25 @@ export class GameSession extends EventTarget {
   applyConfig(cfg) {
     let changed = false;
     if ((cfg.rev || 0) > (this.config.rev || 0)) {
-      const packId = this.config.packId;
-      this.state.config = { ...cfg, packId };
+      const next = { ...cfg, packId: this.config.packId };
+      delete next.endedAt;
+      delete next.final;
+      let board = null;
+      try {
+        board = buildBoard(next, this.me.id, this.state.rerolls); // validate before saving anything
+      } catch {
+        return;
+      }
+      this.state.config = next;
       changed = true;
       if (this.markCount === 0) {
-        this.state.board = buildBoard(this.state.config, this.me.id, this.state.rerolls);
+        this.state.board = board;
         this._eval = null;
         this.emit('board');
       }
     }
     if (cfg.endedAt && !this.ended) {
-      this._applyEnd(cfg.final || [], cfg.endedAt, '');
+      this._applyEnd(cfg.final || [], clampTime(cfg.endedAt, this.config.createdAt || 0), '');
       changed = true;
     }
     if (changed) {
@@ -472,8 +534,15 @@ export class GameSession extends EventTarget {
     if (!this.canSwap()) return false;
     const squares = this.config.squares.slice();
     squares[index] = { t: t.slice(0, 80), r };
-    this.state.config = { ...this.config, squares, rev: (this.config.rev || 0) + 1 };
-    this.state.board = buildBoard(this.state.config, this.me.id, this.state.rerolls);
+    const next = { ...this.config, squares, rev: (this.config.rev || 0) + 1 };
+    let board;
+    try {
+      board = buildBoard(next, this.me.id, this.state.rerolls);
+    } catch {
+      return false;
+    }
+    this.state.config = next;
+    this.state.board = board;
     this._eval = null;
     this.save(true);
     this.publish();
@@ -491,9 +560,9 @@ export class GameSession extends EventTarget {
 
   end() {
     if (!this.canEnd()) return false;
-    const final = this.standings().map(({ pid, name, emoji, points, bingos, marks }) => ({ pid, name, emoji, points, bingos, marks }));
+    const final = this.standings().map(({ pid, name, emoji, points, bingos, marks, lastEventAt }) => ({ pid, name, emoji, points, bingos, marks, lastEventAt }));
     const endedAt = Date.now();
-    this.channel?.send('end', { final, endedAt, byName: this.me.name });
+    this.channel?.send('end', { pid: this.me.id, final, endedAt, byName: this.me.name });
     this._applyEnd(final, endedAt, this.me.name);
     return true;
   }
@@ -501,10 +570,13 @@ export class GameSession extends EventTarget {
   _applyEnd(final, endedAt, byName) {
     this.state.status = 'ended';
     this.state.endedAt = endedAt;
-    // Make sure I'm on the podium with my own exact numbers.
-    const mine = this.summary();
-    const list = (final || []).filter((p) => p.pid !== this.me.id);
-    list.push({ pid: mine.pid, name: mine.name, emoji: mine.emoji, points: mine.points, bingos: mine.bingos, marks: mine.marks });
+    // The ender's list is the final word, so every phone shows the same podium.
+    // Only add myself if the ender never heard from me.
+    const list = (final || []).slice();
+    if (!list.some((p) => p.pid === this.me.id)) {
+      const mine = this.summary();
+      list.push({ pid: mine.pid, name: mine.name, emoji: mine.emoji, points: mine.points, bingos: mine.bingos, marks: mine.marks, lastEventAt: mine.lastEventAt });
+    }
     this.state.final = list.sort(compareStandings);
     this.addFeed({ type: 'end', name: byName, at: endedAt });
     this.save(true);

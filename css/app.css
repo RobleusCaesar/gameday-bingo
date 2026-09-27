@@ -700,7 +700,7 @@ textarea.input { min-height: 110px; resize: vertical; line-height: 1.4; }
 
 /* ---------- FX layer ---------- */
 #layer { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
-#layer > * { pointer-events: auto; }
+:where(#layer) > * { pointer-events: auto; } /* zero specificity: .banner etc. can opt out */
 .fx { position: fixed; pointer-events: none; z-index: 60; will-change: transform, opacity; }
 .fx-dot { width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--blot); }
 .fx-pts {

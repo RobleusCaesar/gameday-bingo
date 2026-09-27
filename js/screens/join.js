@@ -11,10 +11,11 @@ const ALLOWED = new Set(CODE_ALPHABET);
 export function render(app, arg) {
   const initial = arg ? parseJoin('#/join/' + arg) : null;
   let busy = false;
+  let disposed = false;
 
   const input = h('input', {
     id: 'j-code', inputmode: 'text', autocomplete: 'off', autocapitalize: 'characters', autocorrect: 'off',
-    spellcheck: 'false', enterkeyhint: 'go', 'aria-label': 'Game code, 5 characters', maxlength: 400,
+    spellcheck: 'false', enterkeyhint: 'go', 'aria-label': 'Game code, 5 characters',
   });
   const boxes = h('div', { class: 'code-boxes', 'aria-hidden': 'true' }, ...Array.from({ length: 5 }, () => h('span')));
   const entry = h('div', { class: 'code-entry' }, boxes, input);
@@ -82,12 +83,15 @@ export function render(app, arg) {
         }
         msg.textContent = `Finding game ${code}…`;
         cfg = await requestConfig(code, { key: profile().id + '-join' });
+        if (disposed) return;
         if (!cfg) {
           bad(`Couldn’t find game ${code}. Check the code, or ask for the invite link.`);
           return;
         }
       }
-      const session = joinGame(cfg);
+      if (disposed) return;
+      let session = null;
+      try { session = joinGame(cfg); } catch (err) { console.error(err); }
       if (!session) { bad('That game didn’t come through right. Ask for a fresh invite link.'); return; }
       say(`You’re in! Game ${code}`, '🎉');
       go('/play/' + code, { replace: true });
@@ -120,4 +124,5 @@ export function render(app, arg) {
   } else {
     requestAnimationFrame(() => input.focus());
   }
+  return () => { disposed = true; };
 }
