@@ -35,20 +35,23 @@ export function fitFont(text, w, hgt, max) {
 
 /** Returns { size, fits, lines } for the best size; at 11px `fits` may be false. */
 export function layout(text, w, hgt, max) {
-  const words = units(text);
+  // Glyph widths scale linearly with font size, so measure once at 100px.
+  const c = ctx(100);
+  const space100 = c.measureText(' ').width;
+  const words = units(text).map((pieces) => pieces.map((piece) => c.measureText(piece).width));
   let last = null;
   for (let size = max; size >= MIN_FONT; size -= 0.5) {
-    const c = ctx(size);
-    const space = c.measureText(' ').width;
+    const k = size / 100;
+    const space = space100 * k;
     const lh = size * LINE_HEIGHT;
     let lines = 1;
     let line = 0;
     let ok = true;
     for (const pieces of words) {
-      for (const [k, piece] of pieces.entries()) {
-        const ww = c.measureText(piece).width;
+      for (const [i, w100] of pieces.entries()) {
+        const ww = w100 * k;
         if (ww > w) { ok = false; break; }
-        const gap = k === 0 ? space : 0;
+        const gap = i === 0 ? space : 0;
         if (!line) line = ww;
         else if (line + gap + ww <= w) line += gap + ww;
         else { lines++; line = ww; }

@@ -4,7 +4,7 @@ import { profile, settings, updateSettings, resetSettingsCache } from '../settin
 import { THEMES } from '../theme.js';
 import { buildProfileForm } from './onboard.js';
 import { wakeLockSupported } from '../wakelock.js';
-import { closeCurrent } from '../game.js';
+import { closeCurrent, currentSession } from '../game.js';
 import * as store from '../store.js';
 import * as sfx from '../audio.js';
 import * as haptics from '../haptics.js';
@@ -33,7 +33,7 @@ export function render(app) {
   const profileRow = h('button', {
     class: 'card row', style: { width: '100%', textAlign: 'left', color: 'var(--text)' },
     onclick: () => sheet((close) => h('div', null, h('h2', null, 'Your profile'),
-      buildProfileForm({ submitLabel: 'Save', onDone: () => { close(); go('/settings', { replace: true }); } })), { label: 'Edit profile' }),
+      buildProfileForm({ submitLabel: 'Save', onDone: () => { close(); currentSession()?.publish(); go('/settings', { replace: true }); } })), { label: 'Edit profile' }),
   },
   h('span', { style: { fontSize: '40px' }, 'aria-hidden': 'true' }, me.emoji),
   h('span', { class: 'grow' }, h('b', { style: { display: 'block', fontSize: '18px' } }, me.name), h('small', { class: 'hint' }, 'Tap to change name or avatar')),

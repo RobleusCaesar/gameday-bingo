@@ -135,7 +135,6 @@ export class GameSession extends EventTarget {
   constructor(state) {
     super();
     this.state = state;
-    this.me = profile();
     this.channel = null;
     this.syncStatus = 'off';
     this._saveTimer = null;
@@ -155,6 +154,8 @@ export class GameSession extends EventTarget {
     s.marks[CENTER] = true;
   }
 
+  /** Read fresh each time so a name/avatar change shows up mid-game. */
+  get me() { return profile(); }
   get code() { return this.state.code; }
   get config() { return this.state.config; }
   get board() { return this.state.board; }

@@ -610,10 +610,10 @@ textarea.input { min-height: 110px; resize: vertical; line-height: 1.4; }
   height: 112%;
   z-index: 1;
   pointer-events: none;
-  opacity: 0;
+  display: none; /* unmarked cells skip the SVG filter entirely */
   transform: rotate(var(--blot-rot, 0deg)) scale(var(--blot-scale, 1));
 }
-.cell.marked .blot { opacity: 1; }
+.cell.marked .blot { display: block; }
 .cell-check {
   position: absolute;
   right: -8px;

@@ -5,6 +5,16 @@ import { evaluate, bingoKeys, cellsForKey, CENTER } from './rules.js';
 import { fill, appUrl } from './share.js';
 import { blotPath } from './fx.js';
 import { seeded } from './rng.js';
+import { BOARD_LOGO } from '../config.js';
+
+function loadImage(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
 
 const W = 1080;
 const H = 1350;
@@ -91,27 +101,35 @@ export async function drawCard(session) {
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
 
-  // Header.
+  // Header: the board logo if one is set, otherwise the wordmark.
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = c.primary;
-  ctx.font = '800 42px "Barlow Condensed", sans-serif';
-  if ('letterSpacing' in ctx) ctx.letterSpacing = '18px';
-  ctx.fillText('GAMEDAY', W / 2 + 9, 92);
-  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
-  ctx.save();
-  ctx.translate(W / 2, 222);
-  ctx.rotate(-0.045);
-  ctx.font = '400 140px "Alfa Slab One", Georgia, serif';
-  ctx.fillStyle = '#000000';
-  ctx.globalAlpha = 0.35;
-  ctx.fillText('BINGO', 0, 10);
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = c.primary;
-  ctx.fillText('BINGO', 0, 7);
-  ctx.fillStyle = c.paper;
-  ctx.fillText('BINGO', 0, 0);
-  ctx.restore();
+  const logo = BOARD_LOGO ? await loadImage(BOARD_LOGO) : null;
+  if (logo) {
+    const boxW = 880, boxH = 220;
+    const scale = Math.min(boxW / logo.naturalWidth, boxH / logo.naturalHeight);
+    const lw = logo.naturalWidth * scale, lh = logo.naturalHeight * scale;
+    ctx.drawImage(logo, (W - lw) / 2, 30 + (boxH - lh) / 2, lw, lh);
+  } else {
+    ctx.fillStyle = c.primary;
+    ctx.font = '800 42px "Barlow Condensed", sans-serif';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '18px';
+    ctx.fillText('GAMEDAY', W / 2 + 9, 92);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    ctx.save();
+    ctx.translate(W / 2, 222);
+    ctx.rotate(-0.045);
+    ctx.font = '400 140px "Alfa Slab One", Georgia, serif';
+    ctx.fillStyle = '#000000';
+    ctx.globalAlpha = 0.35;
+    ctx.fillText('BINGO', 0, 10);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = c.primary;
+    ctx.fillText('BINGO', 0, 7);
+    ctx.fillStyle = c.paper;
+    ctx.fillText('BINGO', 0, 0);
+    ctx.restore();
+  }
   ctx.fillStyle = c.dim;
   ctx.font = '800 38px "Barlow Condensed", sans-serif';
   const date = new Date(session.state.createdAt || Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
