@@ -35,8 +35,7 @@ export function render(app) {
   const packNote = h('p', { class: 'hint' });
   const opp = h('input', { class: 'input', id: 'c-opp', maxlength: 30, placeholder: 'e.g. Chiefs', value: last.opp || '', autocapitalize: 'words', enterkeyhint: 'next' });
   const team = h('input', { class: 'input', id: 'c-team', maxlength: 30, placeholder: 'e.g. Broncos', value: last.team || '', autocapitalize: 'words' });
-  const teamField = h('div', { class: 'field' }, h('label', { for: 'c-team' }, 'Your team'), team,
-    h('p', { class: 'hint' }, 'Fills {TEAM} in squares.'));
+  const teamField = h('div', { class: 'field' }, h('label', { for: 'c-team' }, 'Your team'), team);
   const createBtn = h('button', { type: 'submit', class: 'btn btn-primary btn-lg btn-block' }, 'Create game');
 
   for (const p of packs) {
@@ -57,12 +56,25 @@ export function render(app) {
       packNote.textContent = `Only ${s.total} squares, so boards will look alike. Add more in Square Packs.`;
       packNote.style.color = 'var(--gold)';
     } else {
-      packNote.textContent = `${s.total} squares · Unique-board strength: ${s.strength === 'great' ? 'Great' : s.strength === 'good' ? 'Good' : 'Low'}`;
-      packNote.style.color = '';
+      packNote.textContent = '';
     }
+    packName.textContent = pack.name;
     createBtn.disabled = !s.canCreate;
   };
   packSel.addEventListener('change', refreshPack);
+
+  // Most people never need this: every card is drawn from the default Broncos squares.
+  // Anyone who has made their own list in Square Packs can switch here.
+  const packName = h('b');
+  const packField = h('div', { class: 'field', hidden: true },
+    h('label', { for: 'c-pack' }, 'Which squares?'), packSel,
+    h('p', { class: 'hint' }, 'The list of things everyone’s card is drawn from. Edit lists in Square Packs.'));
+  const packLine = h('p', { class: 'hint', style: { marginBottom: '18px' } },
+    'Squares: ', packName, ' · ',
+    h('button', {
+      type: 'button', class: 'linkish',
+      onclick: () => { packField.hidden = false; packLine.hidden = true; packSel.focus(); },
+    }, 'Change'));
 
   const mixNote = h('p', { class: 'hint', style: { marginTop: '8px' } }, MIX_NOTES[mix]);
   const mixSeg = h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': 'Board mix' });
@@ -89,9 +101,7 @@ export function render(app) {
       }
     },
   },
-  h('div', { class: 'field' }, h('label', { for: 'c-pack' }, 'Square pack'), packSel, packNote),
-  h('div', { class: 'field' }, h('label', { for: 'c-opp' }, 'Opponent'), opp,
-    h('p', { class: 'hint' }, 'Fills {OPP} in squares, like “Sad {OPP} fan shown”.')),
+  h('div', { class: 'field' }, h('label', { for: 'c-opp' }, 'Opponent'), opp),
   teamField,
   h('div', { class: 'field' },
     h('span', { class: 'label' }, 'Ways to win'),
@@ -103,6 +113,9 @@ export function render(app) {
     ),
   ),
   h('div', { class: 'field' }, h('span', { class: 'label' }, 'Board mix'), mixSeg, mixNote),
+  packLine,
+  packField,
+  packNote,
   createBtn,
   );
 

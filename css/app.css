@@ -1148,3 +1148,5 @@ input[type="range"] { width: 100%; accent-color: var(--primary); min-height: 44p
   transition-duration: .01ms !important;
 }
 [data-motion="reduced"] .cell.near .cell-gold, [data-motion="reduced"] .cell.need .cell-gold { opacity: .5; }
+
+.linkish { padding: 8px 4px; margin: -8px 0; border: 0; background: none; color: var(--primary-text); font-weight: 800; text-decoration: underline; min-height: 44px; }
