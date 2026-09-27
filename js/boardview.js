@@ -137,7 +137,8 @@ export class BoardView {
     );
     if (BOARD_LOGO) {
       const img = h('img', { src: BOARD_LOGO, alt: 'Game logo', decoding: 'async' });
-      img.addEventListener('error', () => box.replaceChildren(mark));
+      box.classList.add('has-logo');
+      img.addEventListener('error', () => { box.classList.remove('has-logo'); box.replaceChildren(mark); });
       box.append(img);
     } else {
       box.append(mark);

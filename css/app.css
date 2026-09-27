@@ -519,6 +519,8 @@ textarea.input { min-height: 110px; resize: vertical; line-height: 1.4; }
   overflow: hidden;
 }
 .board-banner img { width: 100%; height: 100%; object-fit: contain; }
+.board-banner.has-logo { aspect-ratio: auto; }
+.board-banner.has-logo img { height: auto; max-height: 140px; }
 .banner-mark { text-align: center; line-height: 1; }
 .banner-mark .k { display: block; font: 800 14px/1 var(--font-cond); letter-spacing: .5em; margin-left: .5em; color: var(--primary-text); text-transform: uppercase; }
 .banner-mark .w {
