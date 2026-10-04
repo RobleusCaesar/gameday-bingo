@@ -3,6 +3,7 @@
 import { loadLZ } from './libs.js';
 import { isCode } from './rng.js';
 import { MIX, tiersOf } from './board.js';
+import { BROADCASTS } from './tags.js';
 
 const MIX_CODE = { chill: 'c', balanced: 'b', chaos: 'x' };
 const MIX_FROM = { c: 'chill', b: 'balanced', x: 'chaos' };
@@ -36,6 +37,7 @@ function compact(cfg) {
     tm: cfg.team || '',
     w: (cfg.win.corners ? 'c' : '') + (cfg.win.x ? 'x' : '') + (cfg.win.blackout ? 'b' : ''),
     m: MIX_CODE[cfg.mix] || 'b',
+    bc: cfg.broadcast || '',
     hi: cfg.hostId,
     hn: cfg.hostName,
     he: cfg.hostEmoji,
@@ -65,6 +67,7 @@ export function sanitizeConfig(cfg) {
     team: str(cfg.team, 30),
     win: { corners: !!cfg.win?.corners, x: !!cfg.win?.x, blackout: !!cfg.win?.blackout },
     mix: MIX[cfg.mix] ? cfg.mix : 'balanced',
+    broadcast: BROADCASTS.some((b) => b.id === cfg.broadcast) ? cfg.broadcast : '',
     hostId: str(cfg.hostId, 64),
     hostName: str(cfg.hostName, 18) || 'Host',
     hostEmoji: str(cfg.hostEmoji, 8) || '🏈',
@@ -117,6 +120,7 @@ export async function decodePayload(code, payload) {
     team: o.tm,
     win: { corners: String(o.w).includes('c'), x: String(o.w).includes('x'), blackout: String(o.w).includes('b') },
     mix: MIX_FROM[o.m] || 'balanced',
+    broadcast: o.bc,
     hostId: o.hi,
     hostName: o.hn,
     hostEmoji: o.he,

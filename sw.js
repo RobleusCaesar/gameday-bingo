@@ -2,7 +2,7 @@
 // The deploy workflow stamps VERSION with the commit SHA. A new SW installs a fresh
 // shell cache and then waits; the page offers "Refresh", which activates it, so an
 // open page never mixes old and new modules.
-const VERSION = 'gdb-5-__BUILD__';
+const VERSION = 'gdb-6-__BUILD__';
 const SHELL_CACHE = 'gdb-shell-' + VERSION;
 const RUNTIME_CACHE = 'gdb-runtime-1';
 
@@ -37,6 +37,7 @@ const SHELL = [
   'js/sharecard.js',
   'js/store.js',
   'js/sync.js',
+  'js/tags.js',
   'js/theme.js',
   'js/ui.js',
   'js/wakelock.js',

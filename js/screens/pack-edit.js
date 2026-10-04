@@ -4,6 +4,15 @@ import { getPack, savePack, stats, categories, lockedBy, duplicatePack, cleanTex
 import { shortId } from '../rng.js';
 import { normText, MIN_SQUARES, WARN_SQUARES } from '../board.js';
 import { meter } from './packs.js';
+import { BROADCASTS, broadcastLabel, parseTeams } from '../tags.js';
+
+/** Chips for a square's tags: "vs 49ers", "SNF". */
+function tagChips(sq) {
+  return [
+    ...(sq.opponents || []).map((o) => h('span', { class: 'chip tag-chip' }, 'vs ' + o)),
+    ...(sq.broadcasts || []).map((b) => h('span', { class: 'chip tag-chip' }, broadcastLabel(b))),
+  ];
+}
 
 const RARITIES = [['C', 'Common', '1 pt'], ['U', 'Uncommon', '2 pts'], ['R', 'Rare', '3 pts']];
 
@@ -37,6 +46,10 @@ function editSquare(pack, sq) {
   return sheet((close) => {
     let r = sq?.r || 'C';
     let c = sq?.c || '';
+    const opps = h('input', { class: 'input', id: 'sq-opp', maxlength: 80, placeholder: 'Any opponent', value: (sq?.opponents || []).join(', ') });
+    const bc = h('select', { class: 'input', id: 'sq-bc' },
+      h('option', { value: '' }, 'Any broadcast'),
+      ...BROADCASTS.map((b) => h('option', { value: b.id, selected: (sq?.broadcasts || [])[0] === b.id }, b.label)));
     const text = h('textarea', { class: 'input', id: 'sq-text', maxlength: 80, autofocus: true, placeholder: 'e.g. Sad {OPP} fan shown' });
     text.value = sq?.t || '';
     const err = h('p', { class: 'hint', role: 'alert', style: { color: 'var(--danger)' } });
@@ -47,7 +60,8 @@ function editSquare(pack, sq) {
         if (!t) { err.textContent = 'Type what has to happen.'; return; }
         const dupe = pack.squares.find((x) => x !== sq && normText(x.t) === normText(t));
         if (dupe) { err.textContent = 'That square is already in the pack.'; return; }
-        close({ t, r, c });
+        const opponents = parseTeams(opps.value);
+        close({ t, r, c, opponents: opponents.length ? opponents : undefined, broadcasts: bc.value ? [bc.value] : undefined });
       },
     },
     h('h2', null, sq ? 'Edit square' : 'Add square'),
@@ -55,6 +69,9 @@ function editSquare(pack, sq) {
       h('p', { class: 'hint' }, 'Use {OPP} for the opponent and {TEAM} for your team.')),
     h('div', { class: 'field' }, h('span', { class: 'label' }, 'Rarity'), raritySeg(r, (v) => { r = v; })),
     h('div', { class: 'field' }, h('label', { for: 'sq-cat' }, 'Category'), categoryField(pack, c, (v) => { c = v; }, 'sq-cat')),
+    h('div', { class: 'field' }, h('label', { for: 'sq-opp' }, 'Only when playing'), opps,
+      h('p', { class: 'hint' }, 'Team names, comma-separated. Leave blank for every game. Nicknames work: Niners = 49ers.')),
+    h('div', { class: 'field' }, h('label', { for: 'sq-bc' }, 'Only on'), bc),
     err,
     h('div', { class: 'actions-row' },
       h('button', { type: 'button', class: 'btn btn-ghost', onclick: () => close() }, 'Cancel'),
@@ -116,9 +133,10 @@ export function render(app, id) {
   const drawList = () => {
     const q = query.trim().toLowerCase();
     const rows = pack.squares
-      .filter((sq) => !q || sq.t.toLowerCase().includes(q) || (sq.c || '').toLowerCase().includes(q))
+      .filter((sq) => !q || [sq.t, sq.c, ...(sq.opponents || []), ...(sq.broadcasts || [])].join(' ').toLowerCase().includes(q))
       .map((sq) => h('li', null, h('button', { class: 'sq-row', onclick: () => edit(sq) },
         h('span', { class: 't' }, sq.t),
+        ...tagChips(sq),
         sq.c ? h('span', { class: 'chip cat-chip' }, sq.c) : null,
         h('span', { class: 'chip chip-' + sq.r }, h('span', { 'aria-hidden': 'true' }, sq.r),
           h('span', { class: 'sr-only' }, RARITIES.find(([k]) => k === sq.r)[1])))));
@@ -135,8 +153,13 @@ export function render(app, id) {
       pack.squares = pack.squares.filter((x) => x !== sq);
     } else if (sq) {
       Object.assign(sq, res);
+      if (!res.opponents) delete sq.opponents;
+      if (!res.broadcasts) delete sq.broadcasts;
     } else {
-      pack.squares.unshift({ id: shortId(), ...res });
+      const fresh = { id: shortId(), ...res };
+      if (!fresh.opponents) delete fresh.opponents;
+      if (!fresh.broadcasts) delete fresh.broadcasts;
+      pack.squares.unshift(fresh);
     }
     persist();
   }

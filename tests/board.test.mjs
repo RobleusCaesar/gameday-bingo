@@ -9,9 +9,11 @@ const { generateBoard, packStats, quotas, MIX, tiersOf } = await import('../js/b
 const { LINES, evaluate, bingoKeys, marksToBits, bitsToMarks, CENTER } = await import('../js/rules.js');
 const { BUILTIN_PACKS } = await import('../js/data/default-packs.js');
 const { newCode, isCode } = await import('../js/rng.js');
+const { eligibleSquares } = await import('../js/tags.js');
 
-const broncos = BUILTIN_PACKS[0].squares;
-const anyGame = BUILTIN_PACKS[1].squares;
+// Draw pools for a typical game (non-49ers opponent, Sunday afternoon).
+const broncos = eligibleSquares(BUILTIN_PACKS[0].squares, { opp: 'Chiefs', broadcast: 'afternoon' });
+const anyGame = eligibleSquares(BUILTIN_PACKS[1].squares, { opp: 'Chiefs', broadcast: 'afternoon' });
 
 test('default packs are big enough and fully tiered', () => {
   for (const pack of BUILTIN_PACKS) {
@@ -19,12 +21,14 @@ test('default packs are big enough and fully tiered', () => {
     assert.ok(s.total >= 75, `${pack.name} has ${s.total}`);
     assert.equal(s.strength, 'great', pack.name);
   }
-  const broncosTiers = tiersOf(broncos);
-  assert.deepEqual(
-    { C: broncosTiers.C.length, U: broncosTiers.U.length, R: broncosTiers.R.length },
-    { C: 36, U: 38, R: 17 },
-  );
-  assert.ok(!JSON.stringify(anyGame).match(/Broncos|Nix|Payton|Elway|Mahomes/));
+  for (const pool of [broncos, anyGame]) {
+    const t = tiersOf(pool);
+    // Enough of every tier to fill the most demanding mix without backfilling.
+    for (const tier of ['C', 'U', 'R']) {
+      assert.ok(t[tier].length >= Math.max(...Object.values(MIX).map((m) => m[tier])), tier);
+    }
+  }
+  assert.ok(!JSON.stringify(BUILTIN_PACKS[1].squares).match(/Broncos|Nix|Payton|Elway|Mahomes/));
 });
 
 test('boards are deterministic per seed and have FREE center', () => {
@@ -48,7 +52,7 @@ test('rarity quotas per mix', () => {
 });
 
 test('short tiers backfill from the adjacent tier', () => {
-  assert.deepEqual(quotas({ C: 30, U: 30, R: 1 }, 'chaos'), { C: 8, U: 15, R: 1 });
+  assert.deepEqual(quotas({ C: 30, U: 30, R: 1 }, 'chaos'), { C: 12, U: 11, R: 1 });
   assert.deepEqual(quotas({ C: 2, U: 30, R: 30 }, 'chill'), { C: 2, U: 20, R: 2 });
   assert.deepEqual(quotas({ C: 24, U: 0, R: 0 }, 'balanced'), { C: 24, U: 0, R: 0 });
   const onlyCommon = Array.from({ length: 24 }, (_, i) => ({ t: 'sq' + i, r: 'C' }));

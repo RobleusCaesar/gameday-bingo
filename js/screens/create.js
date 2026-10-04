@@ -4,11 +4,12 @@ import { listPacks, stats, usesTeamToken } from '../packs.js';
 import { createGame } from '../game.js';
 import { MIX_LABELS } from '../board.js';
 import * as store from '../store.js';
+import { BROADCASTS, DEFAULT_BROADCAST } from '../tags.js';
 
 const MIX_NOTES = {
-  chill: 'Mostly common squares. Bingos come quick.',
-  balanced: 'A good mix. The default.',
-  chaos: 'Loaded with rares. Big swings.',
+  chill: 'Mostly common squares. Almost everyone gets a bingo.',
+  balanced: 'A good mix. Most players get a bingo. The default.',
+  chaos: 'Loaded with rares. Bingos are hard-won.',
 };
 
 function toggleRow({ label, sub, checked, disabled, onChange }) {
@@ -30,6 +31,9 @@ export function render(app) {
   let packId = packs.some((p) => p.id === last.packId) ? last.packId : (packs.find((p) => p.id === 'broncos') || packs[0])?.id;
   const win = { corners: !!last.win?.corners, x: !!last.win?.x, blackout: !!last.win?.blackout };
   let mix = last.mix || 'balanced';
+  const broadcastSel = h('select', { class: 'input', id: 'c-bc' },
+    ...BROADCASTS.map((b) => h('option', { value: b.id, selected: b.id === (last.broadcast || DEFAULT_BROADCAST) }, b.label)));
+  const gameOpts = () => ({ opp: opp.value, broadcast: broadcastSel.value });
 
   const packSel = h('select', { class: 'input', id: 'c-pack' });
   const packNote = h('p', { class: 'hint' });
@@ -46,7 +50,7 @@ export function render(app) {
   const refreshPack = () => {
     const pack = packs.find((p) => p.id === packSel.value);
     packId = pack?.id;
-    const s = pack ? stats(pack) : null;
+    const s = pack ? stats(pack, gameOpts()) : null;
     teamField.hidden = !pack || !usesTeamToken(pack);
     if (!s) return;
     if (!s.canCreate) {
@@ -62,6 +66,8 @@ export function render(app) {
     createBtn.disabled = !s.canCreate;
   };
   packSel.addEventListener('change', refreshPack);
+  broadcastSel.addEventListener('change', refreshPack);
+  opp.addEventListener('change', refreshPack);
 
   // Most people never need this: every card is drawn from the default Broncos squares.
   // Anyone who has made their own list in Square Packs can switch here.
@@ -90,10 +96,11 @@ export function render(app) {
     onsubmit: (e) => {
       e.preventDefault();
       const pack = packs.find((p) => p.id === packId);
-      if (!pack || !stats(pack).canCreate) return;
-      store.set('lastCreate', { packId, opp: opp.value.trim(), team: team.value.trim(), win, mix });
+      if (!pack || !stats(pack, gameOpts()).canCreate) return;
+      const broadcast = broadcastSel.value;
+      store.set('lastCreate', { packId, opp: opp.value.trim(), team: team.value.trim(), win, mix, broadcast });
       try {
-        const s = createGame({ pack, opp: opp.value, team: team.value, win, mix });
+        const s = createGame({ pack, opp: opp.value, team: team.value, win, mix, broadcast });
         go('/lobby/' + s.code, { replace: true });
       } catch (err) {
         console.error(err);
@@ -102,6 +109,7 @@ export function render(app) {
     },
   },
   h('div', { class: 'field' }, h('label', { for: 'c-opp' }, 'Opponent'), opp),
+  h('div', { class: 'field' }, h('label', { for: 'c-bc' }, 'Broadcast'), broadcastSel),
   teamField,
   h('div', { class: 'field' },
     h('span', { class: 'label' }, 'Ways to win'),

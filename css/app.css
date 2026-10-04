@@ -1150,3 +1150,4 @@ input[type="range"] { width: 100%; accent-color: var(--primary); min-height: 44p
 [data-motion="reduced"] .cell.near .cell-gold, [data-motion="reduced"] .cell.need .cell-gold { opacity: .5; }
 
 .linkish { padding: 8px 4px; margin: -8px 0; border: 0; background: none; color: var(--primary-text); font-weight: 800; text-decoration: underline; min-height: 44px; }
+.tag-chip { background: color-mix(in srgb, var(--gold) 22%, var(--bg-3)); color: var(--text); }

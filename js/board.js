@@ -4,10 +4,12 @@
 import { seeded, shuffle } from './rng.js';
 import { LINES, CENTER } from './rules.js';
 
+// Tuned with tools/simulate.mjs (Common 0.85 / Uncommon 0.45 / Rare 0.12 chance per game)
+// so a player's chance of at least one bingo is about: Chill 90%, Balanced 75%, Chaos 45%.
 export const MIX = {
-  chill: { C: 14, U: 8, R: 2 },
-  balanced: { C: 11, U: 9, R: 4 },
-  chaos: { C: 8, U: 9, R: 7 },
+  chill: { C: 18, U: 4, R: 2 },
+  balanced: { C: 14, U: 7, R: 3 },
+  chaos: { C: 12, U: 5, R: 7 },
 };
 export const MIX_LABELS = { chill: 'Chill', balanced: 'Balanced', chaos: 'Chaos' };
 export const MIN_SQUARES = 24;

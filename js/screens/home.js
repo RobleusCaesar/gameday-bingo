@@ -3,6 +3,26 @@ import { go } from '../nav.js';
 import { profile } from '../settings.js';
 import { listGames } from '../game.js';
 import * as store from '../store.js';
+import { confirmSheet, say } from '../ui.js';
+import { pendingMerges, mergeDefaults, dismissMerge } from '../packs.js';
+
+/** One-time offer when a default pack the user edited has a newer version. */
+async function offerMerges() {
+  for (const p of pendingMerges()) {
+    const ok = await confirmSheet({
+      title: 'Default pack updated',
+      body: `“${p.name}” has new squares (more likely calls, opponent and broadcast squares) and no longer includes player-injury squares. You’ve edited your copy. Merge the new squares in? Your own edits stay.`,
+      ok: 'Merge new squares',
+      cancel: 'Keep mine as is',
+    });
+    if (ok) {
+      const res = mergeDefaults(p.id);
+      if (res) say(`Added ${res.added} squares${res.removed ? `, removed ${res.removed}` : ''}`, '🆕');
+    } else {
+      dismissMerge(p.id);
+    }
+  }
+}
 
 const LIVE_WINDOW = 12 * 60 * 60 * 1000;
 
@@ -59,4 +79,5 @@ export function render(app) {
     ),
   );
   app.append(screen);
+  if (pendingMerges().length) setTimeout(offerMerges, 400);
 }

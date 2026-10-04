@@ -7,6 +7,7 @@ import { profile } from './settings.js';
 import { GameChannel } from './sync.js';
 import { newCode } from './rng.js';
 import { sanitizeConfig, sanitizeStandings, fill } from './share.js';
+import { eligibleSquares, DEFAULT_BROADCAST } from './tags.js';
 
 const FEED_MAX = 150;
 const MAX_PLAYERS = 60;
@@ -79,7 +80,7 @@ export function openSession(code) {
 }
 
 /** Host a new game from a pack. */
-export function createGame({ pack, opp, team, win, mix }) {
+export function createGame({ pack, opp, team, win, mix, broadcast = DEFAULT_BROADCAST }) {
   const me = profile();
   let code = newCode();
   while (hasGame(code)) code = newCode();
@@ -89,7 +90,9 @@ export function createGame({ pack, opp, team, win, mix }) {
     rev: 0,
     packId: pack.id,
     packName: pack.name,
-    squares: pack.squares.map((s) => ({ t: s.t, r: s.r })),
+    // Only squares that fit this opponent and broadcast enter the game's pool.
+    squares: eligibleSquares(pack.squares, { opp, broadcast }).map((s) => ({ t: s.t, r: s.r })),
+    broadcast,
     opp: (opp || '').trim().slice(0, 30),
     team: (team || '').trim().slice(0, 30),
     win: { corners: !!win.corners, x: !!win.x, blackout: !!win.blackout },
